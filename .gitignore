@@ -1,0 +1,24 @@
+# Build output
+target/
+build/
+
+# Gradle
+.gradle/
+gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled
+*.class
