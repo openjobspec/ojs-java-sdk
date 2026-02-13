@@ -71,12 +71,13 @@ public final class OJSWorker {
     private record NamedMiddleware(String name, Middleware middleware) {}
 
     private OJSWorker(Builder builder) {
-        this.transport = HttpTransport.builder()
-                .url(builder.url)
-                .httpClient(builder.httpClient)
-                .authToken(builder.authToken)
-                .headers(builder.headers)
-                .build();
+        this.transport = builder.transport != null ? builder.transport
+                : HttpTransport.builder()
+                    .url(builder.url)
+                    .httpClient(builder.httpClient)
+                    .authToken(builder.authToken)
+                    .headers(builder.headers)
+                    .build();
         this.workerId = "worker_" + UUID.randomUUID().toString().substring(0, 12);
         this.queues = builder.queues != null ? List.copyOf(builder.queues) : List.of("default");
         this.concurrency = builder.concurrency > 0 ? builder.concurrency : 10;
@@ -187,14 +188,18 @@ public final class OJSWorker {
 
     private void fetchLoop() {
         while (!stopped && state.get() == State.RUNNING) {
+            int acquired = 0;
             try {
                 if (!semaphore.tryAcquire(pollInterval.toMillis(), TimeUnit.MILLISECONDS)) {
                     continue;
                 }
+                acquired = 1 + semaphore.drainPermits();
+                int fetchCount = Math.min(acquired, concurrency);
 
-                var jobs = fetchJobs();
+                var jobs = fetchJobs(fetchCount);
                 if (jobs.isEmpty()) {
-                    semaphore.release();
+                    semaphore.release(acquired);
+                    acquired = 0;
                     Thread.sleep(pollInterval.toMillis());
                     continue;
                 }
@@ -203,15 +208,20 @@ public final class OJSWorker {
                     Thread.startVirtualThread(() -> processJob(job));
                 }
 
-                // Release extra permits if we got fewer jobs than expected
-                if (jobs.size() < 1) {
-                    semaphore.release();
+                // Release unused permits if we got fewer jobs than requested
+                int unused = acquired - jobs.size();
+                if (unused > 0) {
+                    semaphore.release(unused);
                 }
+                acquired = 0;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception e) {
-                // Log and continue on transport errors
+                // Release permits on error and backoff before retrying
+                if (acquired > 0) {
+                    semaphore.release(acquired);
+                }
                 try { Thread.sleep(pollInterval.toMillis()); } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     return;
@@ -235,11 +245,11 @@ public final class OJSWorker {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Job> fetchJobs() {
+    private List<Job> fetchJobs(int count) {
         var request = new LinkedHashMap<String, Object>();
         request.put("worker_id", workerId);
         request.put("queues", queues);
-        request.put("count", 1);
+        request.put("count", count);
 
         var response = transport.post("/workers/fetch", request);
         var jobsList = response.get("jobs");
@@ -298,12 +308,12 @@ public final class OJSWorker {
             var mw = middlewareChain.get(i).middleware();
             var next = chain;
             chain = ctx -> {
-                var wrapper = new Object() { Object result; };
+                Object[] result = {null};
                 mw.apply(ctx, innerCtx -> {
-                    wrapper.result = next.handle(innerCtx);
-                    return wrapper.result;
+                    result[0] = next.handle(innerCtx);
+                    return result[0];
                 });
-                return wrapper.result;
+                return result[0];
             };
         }
         return chain;
@@ -383,6 +393,7 @@ public final class OJSWorker {
         private HttpClient httpClient;
         private String authToken;
         private Map<String, String> headers;
+        private Transport transport;
 
         private Builder() {}
 
@@ -436,8 +447,16 @@ public final class OJSWorker {
             return this;
         }
 
+        /** Set a custom transport (for testing or non-HTTP transports). Overrides url/httpClient/authToken/headers. */
+        public Builder transport(Transport transport) {
+            this.transport = transport;
+            return this;
+        }
+
         public OJSWorker build() {
-            Objects.requireNonNull(url, "url must not be null");
+            if (transport == null) {
+                Objects.requireNonNull(url, "url must not be null");
+            }
             return new OJSWorker(this);
         }
     }

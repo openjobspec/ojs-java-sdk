@@ -3,7 +3,9 @@ package org.openjobspec.ojs;
 import org.openjobspec.ojs.transport.HttpTransport;
 import org.openjobspec.ojs.transport.Transport;
 
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -33,6 +35,12 @@ public final class OJSClient {
 
     private OJSClient(Transport transport) {
         this.transport = transport;
+    }
+
+    /** Create a client with a custom transport (for testing or non-HTTP transports). */
+    public static OJSClient withTransport(Transport transport) {
+        Objects.requireNonNull(transport, "transport must not be null");
+        return new OJSClient(transport);
     }
 
     public static Builder builder() {
@@ -75,7 +83,7 @@ public final class OJSClient {
     /**
      * Enqueue multiple jobs atomically.
      *
-     * @param requests the job requests (use {@link #buildBatchRequest} to construct)
+     * @param requests the job requests as wire-format maps
      * @return list of created jobs
      */
     public List<Job> enqueueBatch(List<Map<String, Object>> requests) {
@@ -119,16 +127,16 @@ public final class OJSClient {
      * Get server conformance manifest.
      */
     public Map<String, Object> manifest() {
-        // Manifest is at /ojs/manifest, not under /ojs/v1
-        // The transport prepends /ojs/v1, so we need to work around
-        return transport.get("/../manifest");
+        return transport.getAbsolute("/ojs/manifest");
     }
 
     // --- Dead Letter Queue ---
 
     public List<Job> listDeadLetterJobs(String queue, int limit, int offset) {
         var path = "/dead-letter?limit=" + limit + "&offset=" + offset;
-        if (queue != null) path += "&queue=" + queue;
+        if (queue != null) {
+            path += "&queue=" + URLEncoder.encode(queue, StandardCharsets.UTF_8);
+        }
         var response = transport.get(path);
         return parseJobList(response);
     }
