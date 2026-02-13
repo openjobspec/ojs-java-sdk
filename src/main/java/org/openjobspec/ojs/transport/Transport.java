@@ -38,4 +38,15 @@ public interface Transport {
      * @return the parsed response body as a map
      */
     Map<String, Object> delete(String path);
+
+    /**
+     * Perform an HTTP GET request using an absolute path (not relative to BASE_PATH).
+     * Used for endpoints like /ojs/manifest that live outside the versioned API.
+     *
+     * @param absolutePath the absolute path (relative to base URL only, e.g. "/ojs/manifest")
+     * @return the parsed response body as a map
+     */
+    default Map<String, Object> getAbsolute(String absolutePath) {
+        throw new UnsupportedOperationException("getAbsolute not supported by this transport");
+    }
 }

@@ -22,6 +22,7 @@ public final class HttpTransport implements Transport {
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
+    private final String rawBaseUrl;
     private final String baseUrl;
     private final HttpClient httpClient;
     private final String authToken;
@@ -29,7 +30,8 @@ public final class HttpTransport implements Transport {
     private final Duration requestTimeout;
 
     private HttpTransport(Builder builder) {
-        this.baseUrl = builder.url.replaceAll("/+$", "") + BASE_PATH;
+        this.rawBaseUrl = builder.url.replaceAll("/+$", "");
+        this.baseUrl = rawBaseUrl + BASE_PATH;
         this.httpClient = builder.httpClient != null ? builder.httpClient
                 : HttpClient.newBuilder()
                         .connectTimeout(DEFAULT_CONNECT_TIMEOUT)
@@ -58,6 +60,59 @@ public final class HttpTransport implements Transport {
     @Override
     public Map<String, Object> delete(String path) {
         return execute("DELETE", path, null);
+    }
+
+    @Override
+    public Map<String, Object> getAbsolute(String absolutePath) {
+        return executeAbsolute("GET", absolutePath, null);
+    }
+
+    private Map<String, Object> executeAbsolute(String method, String path, Map<String, Object> body) {
+        try {
+            var requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(rawBaseUrl + path))
+                    .timeout(requestTimeout)
+                    .header("Content-Type", OJS_CONTENT_TYPE)
+                    .header("Accept", OJS_CONTENT_TYPE)
+                    .header("OJS-Version", OJS_VERSION);
+
+            if (authToken != null && !authToken.isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + authToken);
+            }
+
+            customHeaders.forEach(requestBuilder::header);
+            requestBuilder.method(method, HttpRequest.BodyPublishers.noBody());
+
+            var response = httpClient.send(requestBuilder.build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() >= 400) {
+                throw new OJSException(parseError(response));
+            }
+
+            var responseBody = response.body();
+            if (responseBody == null || responseBody.isBlank()) {
+                return Map.of();
+            }
+
+            var parsed = Json.decode(responseBody);
+            if (parsed instanceof Map<?, ?> map) {
+                @SuppressWarnings("unchecked")
+                var result = (Map<String, Object>) map;
+                return result;
+            }
+            return Map.of("_raw", parsed);
+
+        } catch (OJSException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new OJSException(new OJSError.TransportError(
+                    "transport_error", "HTTP request failed: " + e.getMessage(), e));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new OJSException(new OJSError.TransportError(
+                    "transport_error", "HTTP request interrupted", e));
+        }
     }
 
     private Map<String, Object> execute(String method, String path, Map<String, Object> body) {
