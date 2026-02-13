@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -18,18 +19,26 @@ import java.util.*;
  */
 public final class HttpTransport implements Transport {
 
+    private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
     private final String baseUrl;
     private final HttpClient httpClient;
     private final String authToken;
     private final Map<String, String> customHeaders;
+    private final Duration requestTimeout;
 
     private HttpTransport(Builder builder) {
         this.baseUrl = builder.url.replaceAll("/+$", "") + BASE_PATH;
         this.httpClient = builder.httpClient != null ? builder.httpClient
-                : HttpClient.newBuilder().build();
+                : HttpClient.newBuilder()
+                        .connectTimeout(DEFAULT_CONNECT_TIMEOUT)
+                        .build();
         this.authToken = builder.authToken;
         this.customHeaders = builder.customHeaders != null
                 ? Map.copyOf(builder.customHeaders) : Map.of();
+        this.requestTimeout = builder.requestTimeout != null
+                ? builder.requestTimeout : DEFAULT_REQUEST_TIMEOUT;
     }
 
     public static Builder builder() {
@@ -55,6 +64,7 @@ public final class HttpTransport implements Transport {
         try {
             var requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + path))
+                    .timeout(requestTimeout)
                     .header("Content-Type", OJS_CONTENT_TYPE)
                     .header("Accept", OJS_CONTENT_TYPE)
                     .header("OJS-Version", OJS_VERSION);
@@ -150,6 +160,7 @@ public final class HttpTransport implements Transport {
         private HttpClient httpClient;
         private String authToken;
         private Map<String, String> customHeaders;
+        private Duration requestTimeout;
 
         private Builder() {}
 
@@ -170,6 +181,11 @@ public final class HttpTransport implements Transport {
 
         public Builder headers(Map<String, String> headers) {
             this.customHeaders = headers;
+            return this;
+        }
+
+        public Builder requestTimeout(Duration requestTimeout) {
+            this.requestTimeout = requestTimeout;
             return this;
         }
 
@@ -351,6 +367,10 @@ public final class HttpTransport implements Transport {
                             case 'r' -> sb.append('\r');
                             case 't' -> sb.append('\t');
                             case 'u' -> {
+                                if (pos + 4 > input.length()) {
+                                    throw new IllegalArgumentException(
+                                            "Incomplete unicode escape at position " + (pos - 2));
+                                }
                                 var hex = input.substring(pos, pos + 4);
                                 sb.append((char) Integer.parseInt(hex, 16));
                                 pos += 4;
