@@ -11,6 +11,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.lang.System.Logger.Level;
+
 /**
  * OJS worker for processing jobs. Uses virtual threads (Project Loom) for concurrent execution.
  *
@@ -36,6 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * }</pre>
  */
 public final class OJSWorker {
+
+    private static final System.Logger logger = System.getLogger(OJSWorker.class.getName());
 
     /** Worker lifecycle states. */
     public enum State {
@@ -143,6 +147,9 @@ public final class OJSWorker {
         state.set(State.RUNNING);
         stopped = false;
 
+        logger.log(Level.INFO, "Worker {0} starting (queues={1}, concurrency={2})",
+                workerId, queues, concurrency);
+
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             // Launch fetch loop and heartbeat loop as virtual threads
             var fetchFuture = executor.submit(this::fetchLoop);
@@ -160,11 +167,19 @@ public final class OJSWorker {
                 Thread.sleep(100);
             }
 
+            if (activeCount.get() > 0) {
+                logger.log(Level.WARNING,
+                        "Worker {0} shutting down with {1} active job(s) after grace period",
+                        workerId, activeCount.get());
+            }
+
             fetchFuture.cancel(true);
             heartbeatFuture.cancel(true);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+
+        logger.log(Level.INFO, "Worker {0} stopped", workerId);
     }
 
     /**
@@ -223,6 +238,7 @@ public final class OJSWorker {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception e) {
+                logger.log(Level.DEBUG, "Worker {0} fetch error: {1}", workerId, e.getMessage());
                 // Release permits on error and backoff before retrying
                 if (acquired > 0) {
                     semaphore.release(acquired);
@@ -243,8 +259,9 @@ public final class OJSWorker {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
-            } catch (Exception ignored) {
-                // Continue heartbeating even if one fails
+            } catch (Exception e) {
+                logger.log(Level.DEBUG, "Worker {0} heartbeat failed: {1}",
+                        workerId, e.getMessage());
             }
         }
     }
@@ -272,9 +289,14 @@ public final class OJSWorker {
         activeJobs.put(job.id(), thread);
         activeCount.incrementAndGet();
 
+        logger.log(Level.DEBUG, "Worker {0} processing job {1} (type={2}, attempt={3})",
+                workerId, job.id(), job.type(), job.attempt());
+
         try {
             var handler = handlers.get(job.type());
             if (handler == null) {
+                logger.log(Level.WARNING, "Worker {0} no handler for job type: {1}",
+                        workerId, job.type());
                 nackJob(job.id(), "handler_not_found",
                         "No handler registered for job type: " + job.type());
                 return;
@@ -297,7 +319,11 @@ public final class OJSWorker {
             // ACK
             ackJob(job.id(), finalResult);
 
+            logger.log(Level.DEBUG, "Worker {0} completed job {1}", workerId, job.id());
+
         } catch (Exception e) {
+            logger.log(Level.DEBUG, "Worker {0} job {1} failed: {2}",
+                    workerId, job.id(), e.getMessage());
             nackJob(job.id(), e.getClass().getSimpleName(), e.getMessage());
         } finally {
             activeJobs.remove(job.id());
@@ -344,8 +370,9 @@ public final class OJSWorker {
 
         try {
             transport.post("/workers/nack", request);
-        } catch (Exception ignored) {
-            // Best effort - the visibility timeout will handle recovery
+        } catch (Exception e) {
+            logger.log(Level.DEBUG, "Worker {0} nack failed for job {1}: {2}",
+                    workerId, jobId, e.getMessage());
         }
     }
 
