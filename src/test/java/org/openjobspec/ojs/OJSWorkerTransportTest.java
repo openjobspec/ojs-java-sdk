@@ -317,8 +317,7 @@ class OJSWorkerTransportTest {
             // Should have sent multiple heartbeats
             verify(transport, atLeast(2)).post(eq("/workers/heartbeat"), argThat(body -> {
                 assertNotNull(body.get("worker_id"));
-                assertNotNull(body.get("state"));
-                assertNotNull(body.get("queues"));
+                assertNotNull(body.get("active_jobs"));
                 return true;
             }));
         }

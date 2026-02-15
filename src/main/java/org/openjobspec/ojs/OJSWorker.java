@@ -391,14 +391,7 @@ public final class OJSWorker {
     private void sendHeartbeat() {
         var request = new LinkedHashMap<String, Object>();
         request.put("worker_id", workerId);
-        request.put("state", state.get().value());
-        request.put("active_jobs", activeCount.get());
-        request.put("active_job_ids", new ArrayList<>(activeJobs.keySet()));
-        request.put("queues", queues);
-        request.put("concurrency", concurrency);
-        if (!labels.isEmpty()) {
-            request.put("labels", labels);
-        }
+        request.put("active_jobs", new ArrayList<>(activeJobs.keySet()));
 
         var response = transport.post("/workers/heartbeat", request);
 
@@ -419,7 +412,7 @@ public final class OJSWorker {
     private void sendJobHeartbeat(String jobId) {
         var request = new LinkedHashMap<String, Object>();
         request.put("worker_id", workerId);
-        request.put("job_id", jobId);
+        request.put("active_jobs", List.of(jobId));
         transport.post("/workers/heartbeat", request);
     }
 
