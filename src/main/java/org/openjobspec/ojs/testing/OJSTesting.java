@@ -1,5 +1,9 @@
 package org.openjobspec.ojs.testing;
 
+import org.openjobspec.ojs.Job;
+import org.openjobspec.ojs.OJSClient;
+import org.openjobspec.ojs.transport.Transport;
+
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -49,7 +53,7 @@ public class OJSTesting {
         }
     }
 
-    private static volatile OJSTesting activeInstance;
+    private static final ThreadLocal<OJSTesting> activeInstance = new ThreadLocal<>();
 
     private final List<FakeJob> enqueued = new CopyOnWriteArrayList<>();
     private final List<FakeJob> performed = new CopyOnWriteArrayList<>();
@@ -58,26 +62,46 @@ public class OJSTesting {
 
     private OJSTesting() {}
 
-    /** Activate fake mode. Returns a testing instance for assertions. */
+    /** Activate fake mode for the current thread. Returns a testing instance for assertions. */
     public static OJSTesting fake() {
         OJSTesting instance = new OJSTesting();
-        activeInstance = instance;
+        activeInstance.set(instance);
         return instance;
     }
 
-    /** Get the active testing instance, or null if not in fake mode. */
+    /** Get the active testing instance for the current thread, or null if not in fake mode. */
     public static OJSTesting getActive() {
-        return activeInstance;
+        return activeInstance.get();
     }
 
-    /** Restore real mode and clear all state. */
+    /** Restore real mode and clear all state for the current thread. */
     public void restore() {
-        if (activeInstance == this) {
-            activeInstance = null;
+        if (activeInstance.get() == this) {
+            activeInstance.remove();
         }
         enqueued.clear();
         performed.clear();
         handlers.clear();
+    }
+
+    /**
+     * Get a fake {@link Transport} that records enqueue calls for assertions.
+     * Pass this to {@link OJSClient#withTransport(Transport)} to create a test client.
+     *
+     * @return a transport that records calls to this testing instance
+     */
+    public Transport transport() {
+        return new FakeTransport(this);
+    }
+
+    /**
+     * Convenience method to create an {@link OJSClient} backed by a fake transport.
+     * Equivalent to {@code OJSClient.withTransport(testing.transport())}.
+     *
+     * @return a client that records enqueue calls for assertions
+     */
+    public OJSClient client() {
+        return OJSClient.withTransport(transport());
     }
 
     /** Register a handler for drain execution. */
@@ -226,5 +250,64 @@ public class OJSTesting {
                     return true;
                 })
                 .toList();
+    }
+
+    /**
+     * A fake {@link Transport} that intercepts OJS API calls and records them
+     * for testing assertions. Only {@code POST /jobs} is intercepted; all other
+     * operations return empty responses.
+     */
+    private static final class FakeTransport implements Transport {
+        private final OJSTesting testing;
+
+        FakeTransport(OJSTesting testing) {
+            this.testing = testing;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Map<String, Object> post(String path, Map<String, Object> body) {
+            if ("/jobs".equals(path)) {
+                return interceptEnqueue(body);
+            }
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> get(String path) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> delete(String path) {
+            return Map.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        private Map<String, Object> interceptEnqueue(Map<String, Object> request) {
+            var type = (String) request.get("type");
+            var args = request.get("args") instanceof List<?> l ? (List<Object>) l : List.of();
+            var options = request.get("options") instanceof Map<?, ?> m
+                    ? (Map<String, Object>) m : Map.<String, Object>of();
+            var queue = options.get("queue") instanceof String q ? q : "default";
+            var meta = request.get("meta") instanceof Map<?, ?> mm
+                    ? (Map<String, Object>) mm : Map.<String, Object>of();
+
+            var fakeJob = testing.recordEnqueue(type, args, queue, meta);
+
+            // Return a response in the same wire format as a real OJS server
+            var jobMap = new LinkedHashMap<String, Object>();
+            jobMap.put("specversion", Job.SPEC_VERSION);
+            jobMap.put("id", fakeJob.id());
+            jobMap.put("type", fakeJob.type());
+            jobMap.put("queue", fakeJob.queue());
+            jobMap.put("args", fakeJob.args());
+            jobMap.put("meta", fakeJob.meta());
+            jobMap.put("state", fakeJob.state());
+            jobMap.put("attempt", fakeJob.attempt());
+            jobMap.put("created_at", fakeJob.createdAt().toString());
+
+            return Map.of("job", jobMap);
+        }
     }
 }
