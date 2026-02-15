@@ -130,6 +130,17 @@ class OJSWorkerTest {
                 () -> worker.register("email.send", null));
     }
 
+    @Test
+    void registerBlankJobTypeThrowsValidationError() {
+        var worker = OJSWorker.builder()
+                .url("http://localhost:8080")
+                .build();
+
+        var ex = assertThrows(OJSError.OJSException.class,
+                () -> worker.register("  ", ctx -> null));
+        assertInstanceOf(OJSError.ValidationError.class, ex.error());
+    }
+
     // -------------------------------------------------------
     // Middleware
     // -------------------------------------------------------

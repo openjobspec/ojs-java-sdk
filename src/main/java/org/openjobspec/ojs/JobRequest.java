@@ -35,7 +35,13 @@ public final class JobRequest {
 
     JobRequest(OJSClient client, String type, Map<String, Object> args) {
         this.client = client;
-        this.type = Objects.requireNonNull(type, "type must not be null");
+        Objects.requireNonNull(type, "type must not be null");
+        if (type.isBlank()) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Job type must not be blank"));
+        }
+        this.type = type;
         this.args = args != null ? args : Map.of();
     }
 

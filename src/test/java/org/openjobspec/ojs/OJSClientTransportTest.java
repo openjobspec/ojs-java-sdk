@@ -98,7 +98,7 @@ class OJSClientTransportTest {
                             Map.of(), "req_123", 422)));
 
             var ex = assertThrows(OJSException.class,
-                    () -> client.enqueue("", Map.of()));
+                    () -> client.enqueue("email.send", Map.of("invalid", true)));
             assertFalse(ex.isRetryable());
             assertEquals("invalid_request", ex.code());
         }

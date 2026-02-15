@@ -427,6 +427,23 @@ class OJSClientTest {
     class BuildRequestTests {
 
         @Test
+        void rejectsBlankJobType() {
+            var client = OJSClient.builder().url("http://localhost:8080").build();
+            var ex = assertThrows(OJSError.OJSException.class,
+                    () -> client.enqueue("  ", (Object) Map.of()));
+            assertInstanceOf(OJSError.ValidationError.class, ex.error());
+            assertFalse(ex.isRetryable());
+        }
+
+        @Test
+        void rejectsEmptyJobType() {
+            var client = OJSClient.builder().url("http://localhost:8080").build();
+            var ex = assertThrows(OJSError.OJSException.class,
+                    () -> client.enqueue("", (Object) Map.of()));
+            assertInstanceOf(OJSError.ValidationError.class, ex.error());
+        }
+
+        @Test
         void buildMinimalRequest() {
             var client = OJSClient.builder().url("http://localhost:8080").build();
             var request = client.enqueue("task.run", (Object) Map.of("key", "value"));

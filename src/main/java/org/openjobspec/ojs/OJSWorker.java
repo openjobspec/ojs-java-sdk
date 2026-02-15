@@ -102,6 +102,11 @@ public final class OJSWorker {
      */
     public void register(String jobType, JobHandler handler) {
         Objects.requireNonNull(jobType, "jobType must not be null");
+        if (jobType.isBlank()) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Job type must not be blank"));
+        }
         Objects.requireNonNull(handler, "handler must not be null");
         handlers.put(jobType, handler);
     }
