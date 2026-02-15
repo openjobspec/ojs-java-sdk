@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for the internal JSON encoder/decoder in {@link HttpTransport.Json}.
+ * Tests for the internal JSON encoder/decoder in {@link Json}.
  * Covers edge cases, unicode handling, number precision, and malformed input.
  */
 class HttpTransportJsonTest {
@@ -24,55 +24,55 @@ class HttpTransportJsonTest {
 
         @Test
         void encodesNull() {
-            assertEquals("null", HttpTransport.Json.encode(null));
+            assertEquals("null", Json.encode(null));
         }
 
         @Test
         void encodesString() {
-            assertEquals("\"hello\"", HttpTransport.Json.encode("hello"));
+            assertEquals("\"hello\"", Json.encode("hello"));
         }
 
         @Test
         void encodesStringWithEscapes() {
-            assertEquals("\"line1\\nline2\"", HttpTransport.Json.encode("line1\nline2"));
-            assertEquals("\"tab\\there\"", HttpTransport.Json.encode("tab\there"));
-            assertEquals("\"quote\\\"here\"", HttpTransport.Json.encode("quote\"here"));
-            assertEquals("\"back\\\\slash\"", HttpTransport.Json.encode("back\\slash"));
+            assertEquals("\"line1\\nline2\"", Json.encode("line1\nline2"));
+            assertEquals("\"tab\\there\"", Json.encode("tab\there"));
+            assertEquals("\"quote\\\"here\"", Json.encode("quote\"here"));
+            assertEquals("\"back\\\\slash\"", Json.encode("back\\slash"));
         }
 
         @Test
         void encodesStringWithControlCharacters() {
-            var encoded = HttpTransport.Json.encode("\u0001\u001f");
+            var encoded = Json.encode("\u0001\u001f");
             assertTrue(encoded.contains("\\u0001"));
             assertTrue(encoded.contains("\\u001f"));
         }
 
         @Test
         void encodesInteger() {
-            assertEquals("42", HttpTransport.Json.encode(42));
-            assertEquals("-1", HttpTransport.Json.encode(-1));
-            assertEquals("0", HttpTransport.Json.encode(0));
+            assertEquals("42", Json.encode(42));
+            assertEquals("-1", Json.encode(-1));
+            assertEquals("0", Json.encode(0));
         }
 
         @Test
         void encodesLong() {
-            assertEquals("9999999999", HttpTransport.Json.encode(9999999999L));
+            assertEquals("9999999999", Json.encode(9999999999L));
         }
 
         @Test
         void encodesDouble() {
-            assertEquals("3.14", HttpTransport.Json.encode(3.14));
+            assertEquals("3.14", Json.encode(3.14));
         }
 
         @Test
         void encodesBoolean() {
-            assertEquals("true", HttpTransport.Json.encode(true));
-            assertEquals("false", HttpTransport.Json.encode(false));
+            assertEquals("true", Json.encode(true));
+            assertEquals("false", Json.encode(false));
         }
 
         @Test
         void encodesEmptyMap() {
-            assertEquals("{}", HttpTransport.Json.encode(Map.of()));
+            assertEquals("{}", Json.encode(Map.of()));
         }
 
         @Test
@@ -80,7 +80,7 @@ class HttpTransportJsonTest {
             var map = new LinkedHashMap<String, Object>();
             map.put("name", "test");
             map.put("count", 5);
-            assertEquals("{\"name\":\"test\",\"count\":5}", HttpTransport.Json.encode(map));
+            assertEquals("{\"name\":\"test\",\"count\":5}", Json.encode(map));
         }
 
         @Test
@@ -89,42 +89,42 @@ class HttpTransportJsonTest {
             inner.put("key", "value");
             var outer = new LinkedHashMap<String, Object>();
             outer.put("nested", inner);
-            assertEquals("{\"nested\":{\"key\":\"value\"}}", HttpTransport.Json.encode(outer));
+            assertEquals("{\"nested\":{\"key\":\"value\"}}", Json.encode(outer));
         }
 
         @Test
         void encodesEmptyList() {
-            assertEquals("[]", HttpTransport.Json.encode(List.of()));
+            assertEquals("[]", Json.encode(List.of()));
         }
 
         @Test
         void encodesList() {
-            assertEquals("[1,2,3]", HttpTransport.Json.encode(List.of(1, 2, 3)));
+            assertEquals("[1,2,3]", Json.encode(List.of(1, 2, 3)));
         }
 
         @Test
         void encodesArray() {
-            assertEquals("[\"a\",\"b\"]", HttpTransport.Json.encode(new Object[]{"a", "b"}));
+            assertEquals("[\"a\",\"b\"]", Json.encode(new Object[]{"a", "b"}));
         }
 
         @Test
         void encodesNullInMap() {
             var map = new LinkedHashMap<String, Object>();
             map.put("key", null);
-            assertEquals("{\"key\":null}", HttpTransport.Json.encode(map));
+            assertEquals("{\"key\":null}", Json.encode(map));
         }
 
         @Test
         void encodesMixedList() {
             assertEquals("[\"hello\",42,true,null]",
-                    HttpTransport.Json.encode(List.of("hello", 42, true, "null_placeholder"))
+                    Json.encode(List.of("hello", 42, true, "null_placeholder"))
                             .replace("\"null_placeholder\"", "null"));
         }
 
         @Test
         void encodesObjectToString() {
             // Non-standard types should be encoded as strings via toString()
-            var result = HttpTransport.Json.encode(java.time.Duration.ofSeconds(5));
+            var result = Json.encode(java.time.Duration.ofSeconds(5));
             assertTrue(result.startsWith("\""));
             assertTrue(result.endsWith("\""));
         }
@@ -139,66 +139,66 @@ class HttpTransportJsonTest {
 
         @Test
         void decodesNull() {
-            assertNull(HttpTransport.Json.decode("null"));
+            assertNull(Json.decode("null"));
         }
 
         @Test
         void decodesTrue() {
-            assertEquals(Boolean.TRUE, HttpTransport.Json.decode("true"));
+            assertEquals(Boolean.TRUE, Json.decode("true"));
         }
 
         @Test
         void decodesFalse() {
-            assertEquals(Boolean.FALSE, HttpTransport.Json.decode("false"));
+            assertEquals(Boolean.FALSE, Json.decode("false"));
         }
 
         @Test
         void decodesString() {
-            assertEquals("hello", HttpTransport.Json.decode("\"hello\""));
+            assertEquals("hello", Json.decode("\"hello\""));
         }
 
         @Test
         void decodesEmptyString() {
-            assertEquals("", HttpTransport.Json.decode("\"\""));
+            assertEquals("", Json.decode("\"\""));
         }
 
         @Test
         void decodesStringWithEscapes() {
-            assertEquals("line1\nline2", HttpTransport.Json.decode("\"line1\\nline2\""));
-            assertEquals("tab\there", HttpTransport.Json.decode("\"tab\\there\""));
-            assertEquals("quote\"here", HttpTransport.Json.decode("\"quote\\\"here\""));
-            assertEquals("back\\slash", HttpTransport.Json.decode("\"back\\\\slash\""));
-            assertEquals("slash/here", HttpTransport.Json.decode("\"slash\\/here\""));
-            assertEquals("\b\f\r", HttpTransport.Json.decode("\"\\b\\f\\r\""));
+            assertEquals("line1\nline2", Json.decode("\"line1\\nline2\""));
+            assertEquals("tab\there", Json.decode("\"tab\\there\""));
+            assertEquals("quote\"here", Json.decode("\"quote\\\"here\""));
+            assertEquals("back\\slash", Json.decode("\"back\\\\slash\""));
+            assertEquals("slash/here", Json.decode("\"slash\\/here\""));
+            assertEquals("\b\f\r", Json.decode("\"\\b\\f\\r\""));
         }
 
         @Test
         void decodesInteger() {
-            assertEquals(42, HttpTransport.Json.decode("42"));
-            assertEquals(-1, HttpTransport.Json.decode("-1"));
-            assertEquals(0, HttpTransport.Json.decode("0"));
+            assertEquals(42, Json.decode("42"));
+            assertEquals(-1, Json.decode("-1"));
+            assertEquals(0, Json.decode("0"));
         }
 
         @Test
         void decodesLong() {
-            assertEquals(9999999999L, HttpTransport.Json.decode("9999999999"));
+            assertEquals(9999999999L, Json.decode("9999999999"));
         }
 
         @Test
         void decodesDouble() {
-            assertEquals(3.14, HttpTransport.Json.decode("3.14"));
+            assertEquals(3.14, Json.decode("3.14"));
         }
 
         @Test
         void decodesScientificNotation() {
-            assertEquals(1.5e10, HttpTransport.Json.decode("1.5e10"));
-            assertEquals(2.0E-3, HttpTransport.Json.decode("2.0E-3"));
-            assertEquals(1.0e+5, HttpTransport.Json.decode("1.0e+5"));
+            assertEquals(1.5e10, Json.decode("1.5e10"));
+            assertEquals(2.0E-3, Json.decode("2.0E-3"));
+            assertEquals(1.0e+5, Json.decode("1.0e+5"));
         }
 
         @Test
         void decodesNegativeDouble() {
-            assertEquals(-3.14, HttpTransport.Json.decode("-3.14"));
+            assertEquals(-3.14, Json.decode("-3.14"));
         }
     }
 
@@ -211,40 +211,40 @@ class HttpTransportJsonTest {
 
         @Test
         void decodesUnicodeEscape() {
-            assertEquals("\u00e9", HttpTransport.Json.decode("\"\\u00e9\"")); // é
+            assertEquals("\u00e9", Json.decode("\"\\u00e9\"")); // é
         }
 
         @Test
         void decodesMultipleUnicodeEscapes() {
-            assertEquals("\u00e9\u00e8", HttpTransport.Json.decode("\"\\u00e9\\u00e8\"")); // éè
+            assertEquals("\u00e9\u00e8", Json.decode("\"\\u00e9\\u00e8\"")); // éè
         }
 
         @Test
         void decodesNullCharacterUnicode() {
-            assertEquals("\u0000", HttpTransport.Json.decode("\"\\u0000\""));
+            assertEquals("\u0000", Json.decode("\"\\u0000\""));
         }
 
         @Test
         void decodesUppercaseUnicodeEscape() {
-            assertEquals("\u00E9", HttpTransport.Json.decode("\"\\u00E9\""));
+            assertEquals("\u00E9", Json.decode("\"\\u00E9\""));
         }
 
         @Test
         void throwsOnIncompleteUnicodeEscape() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("\"\\u00\""));
+                    () -> Json.decode("\"\\u00\""));
         }
 
         @Test
         void throwsOnTruncatedUnicodeEscapeAtEnd() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("\"\\uFF\""));
+                    () -> Json.decode("\"\\uFF\""));
         }
 
         @Test
         void throwsOnUnicodeEscapeAtEndOfInput() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("\"\\u\""));
+                    () -> Json.decode("\"\\u\""));
         }
     }
 
@@ -257,7 +257,7 @@ class HttpTransportJsonTest {
 
         @Test
         void decodesEmptyObject() {
-            var result = HttpTransport.Json.decode("{}");
+            var result = Json.decode("{}");
             assertInstanceOf(Map.class, result);
             assertTrue(((Map<?, ?>) result).isEmpty());
         }
@@ -265,7 +265,7 @@ class HttpTransportJsonTest {
         @Test
         void decodesSimpleObject() {
             @SuppressWarnings("unchecked")
-            var result = (Map<String, Object>) HttpTransport.Json.decode("{\"name\":\"test\",\"count\":5}");
+            var result = (Map<String, Object>) Json.decode("{\"name\":\"test\",\"count\":5}");
             assertEquals("test", result.get("name"));
             assertEquals(5, result.get("count"));
         }
@@ -273,7 +273,7 @@ class HttpTransportJsonTest {
         @Test
         void decodesNestedObject() {
             @SuppressWarnings("unchecked")
-            var result = (Map<String, Object>) HttpTransport.Json.decode(
+            var result = (Map<String, Object>) Json.decode(
                     "{\"outer\":{\"inner\":\"value\"}}");
             @SuppressWarnings("unchecked")
             var outer = (Map<String, Object>) result.get("outer");
@@ -282,7 +282,7 @@ class HttpTransportJsonTest {
 
         @Test
         void decodesEmptyArray() {
-            var result = HttpTransport.Json.decode("[]");
+            var result = Json.decode("[]");
             assertInstanceOf(List.class, result);
             assertTrue(((List<?>) result).isEmpty());
         }
@@ -290,14 +290,14 @@ class HttpTransportJsonTest {
         @Test
         void decodesSimpleArray() {
             @SuppressWarnings("unchecked")
-            var result = (List<Object>) HttpTransport.Json.decode("[1,2,3]");
+            var result = (List<Object>) Json.decode("[1,2,3]");
             assertEquals(List.of(1, 2, 3), result);
         }
 
         @Test
         void decodesMixedArray() {
             @SuppressWarnings("unchecked")
-            var result = (List<Object>) HttpTransport.Json.decode("[\"hello\",42,true,null]");
+            var result = (List<Object>) Json.decode("[\"hello\",42,true,null]");
             assertEquals(4, result.size());
             assertEquals("hello", result.get(0));
             assertEquals(42, result.get(1));
@@ -308,7 +308,7 @@ class HttpTransportJsonTest {
         @Test
         void decodesArrayOfObjects() {
             @SuppressWarnings("unchecked")
-            var result = (List<Object>) HttpTransport.Json.decode(
+            var result = (List<Object>) Json.decode(
                     "[{\"a\":1},{\"b\":2}]");
             assertEquals(2, result.size());
         }
@@ -317,7 +317,7 @@ class HttpTransportJsonTest {
         void decodesDeeplyNestedStructure() {
             var json = "{\"l1\":{\"l2\":{\"l3\":{\"l4\":{\"value\":\"deep\"}}}}}";
             @SuppressWarnings("unchecked")
-            var result = (Map<String, Object>) HttpTransport.Json.decode(json);
+            var result = (Map<String, Object>) Json.decode(json);
             @SuppressWarnings("unchecked")
             var l1 = (Map<String, Object>) result.get("l1");
             @SuppressWarnings("unchecked")
@@ -332,7 +332,7 @@ class HttpTransportJsonTest {
         @Test
         void decodesObjectWithWhitespace() {
             @SuppressWarnings("unchecked")
-            var result = (Map<String, Object>) HttpTransport.Json.decode(
+            var result = (Map<String, Object>) Json.decode(
                     "  { \"key\" : \"value\" , \"num\" : 1 }  ");
             assertEquals("value", result.get("key"));
             assertEquals(1, result.get("num"));
@@ -349,31 +349,31 @@ class HttpTransportJsonTest {
         @Test
         void throwsOnUnterminatedString() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("\"unterminated"));
+                    () -> Json.decode("\"unterminated"));
         }
 
         @Test
         void throwsOnUnterminatedObject() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("{\"key\":\"value\""));
+                    () -> Json.decode("{\"key\":\"value\""));
         }
 
         @Test
         void throwsOnUnterminatedArray() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("[1,2,3"));
+                    () -> Json.decode("[1,2,3"));
         }
 
         @Test
         void throwsOnInvalidToken() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decode("undefined"));
+                    () -> Json.decode("undefined"));
         }
 
         @Test
         void throwsOnInvalidNumberFormat() {
             assertThrows(NumberFormatException.class,
-                    () -> HttpTransport.Json.decode("-"));
+                    () -> Json.decode("-"));
         }
     }
 
@@ -386,20 +386,20 @@ class HttpTransportJsonTest {
 
         @Test
         void decodeObjectReturnsMap() {
-            var result = HttpTransport.Json.decodeObject("{\"key\":\"value\"}");
+            var result = Json.decodeObject("{\"key\":\"value\"}");
             assertEquals("value", result.get("key"));
         }
 
         @Test
         void decodeObjectThrowsForNonObject() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decodeObject("[1,2,3]"));
+                    () -> Json.decodeObject("[1,2,3]"));
         }
 
         @Test
         void decodeObjectThrowsForString() {
             assertThrows(IllegalArgumentException.class,
-                    () -> HttpTransport.Json.decodeObject("\"just a string\""));
+                    () -> Json.decodeObject("\"just a string\""));
         }
     }
 
@@ -418,9 +418,9 @@ class HttpTransportJsonTest {
             original.put("active", true);
             original.put("data", null);
 
-            var json = HttpTransport.Json.encode(original);
+            var json = Json.encode(original);
             @SuppressWarnings("unchecked")
-            var decoded = (Map<String, Object>) HttpTransport.Json.decode(json);
+            var decoded = (Map<String, Object>) Json.decode(json);
 
             assertEquals("test", decoded.get("name"));
             assertEquals(42, decoded.get("count"));
@@ -438,9 +438,9 @@ class HttpTransportJsonTest {
             original.put("point", inner);
             original.put("tags", List.of("a", "b"));
 
-            var json = HttpTransport.Json.encode(original);
+            var json = Json.encode(original);
             @SuppressWarnings("unchecked")
-            var decoded = (Map<String, Object>) HttpTransport.Json.decode(json);
+            var decoded = (Map<String, Object>) Json.decode(json);
 
             @SuppressWarnings("unchecked")
             var decodedPoint = (Map<String, Object>) decoded.get("point");
@@ -455,8 +455,8 @@ class HttpTransportJsonTest {
         @Test
         void roundTripStringWithSpecialCharacters() {
             var original = "line1\nline2\ttab \"quoted\" back\\slash";
-            var json = HttpTransport.Json.encode(original);
-            var decoded = HttpTransport.Json.decode(json);
+            var json = Json.encode(original);
+            var decoded = Json.decode(json);
             assertEquals(original, decoded);
         }
 
@@ -474,15 +474,142 @@ class HttpTransportJsonTest {
             var envelope = new LinkedHashMap<String, Object>();
             envelope.put("job", job);
 
-            var json = HttpTransport.Json.encode(envelope);
+            var json = Json.encode(envelope);
             @SuppressWarnings("unchecked")
-            var decoded = (Map<String, Object>) HttpTransport.Json.decode(json);
+            var decoded = (Map<String, Object>) Json.decode(json);
             @SuppressWarnings("unchecked")
             var decodedJob = (Map<String, Object>) decoded.get("job");
 
             assertEquals("01912f4e-fd1a-7000-8000-000000000001", decodedJob.get("id"));
             assertEquals("email.send", decodedJob.get("type"));
             assertEquals("available", decodedJob.get("state"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Safety Limits
+    // -----------------------------------------------------------------------
+
+    @Nested
+    class SafetyLimitTests {
+
+        @Test
+        void rejectsDeeplyNestedObjects() {
+            // Build JSON with depth > MAX_DEPTH using nested objects
+            var sb = new StringBuilder();
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("{\"a\":");
+            }
+            sb.append("1");
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("}");
+            }
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+        }
+
+        @Test
+        void rejectsDeeplyNestedArrays() {
+            var sb = new StringBuilder();
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("[");
+            }
+            sb.append("1");
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("]");
+            }
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+        }
+
+        @Test
+        void acceptsNestingAtMaxDepth() {
+            // Build JSON with depth == MAX_DEPTH (should succeed)
+            var sb = new StringBuilder();
+            for (int i = 0; i < Json.MAX_DEPTH; i++) {
+                sb.append("{\"a\":");
+            }
+            sb.append("1");
+            for (int i = 0; i < Json.MAX_DEPTH; i++) {
+                sb.append("}");
+            }
+
+            assertDoesNotThrow(() -> Json.decode(sb.toString()));
+        }
+
+        @Test
+        void rejectsMixedDeepNesting() {
+            // Mix objects and arrays to exceed depth
+            var sb = new StringBuilder();
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                if (i % 2 == 0) {
+                    sb.append("{\"a\":");
+                } else {
+                    sb.append("[");
+                }
+            }
+            sb.append("1");
+            for (int i = Json.MAX_DEPTH; i >= 0; i--) {
+                if (i % 2 == 0) {
+                    sb.append("}");
+                } else {
+                    sb.append("]");
+                }
+            }
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+        }
+
+        @Test
+        void rejectsInputExceedingMaxLength() {
+            // Create a JSON string longer than MAX_INPUT_LENGTH
+            var sb = new StringBuilder("\"");
+            sb.append("x".repeat(Json.MAX_INPUT_LENGTH));
+            sb.append("\"");
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+        }
+
+        @Test
+        void acceptsInputAtMaxLength() {
+            // Create a valid JSON string at exactly MAX_INPUT_LENGTH
+            var padding = "x".repeat(Json.MAX_INPUT_LENGTH - 2); // minus 2 for quotes
+            var json = "\"" + padding + "\"";
+            assertEquals(Json.MAX_INPUT_LENGTH, json.length());
+
+            assertDoesNotThrow(() -> Json.decode(json));
+        }
+
+        @Test
+        void depthErrorMessageIsClear() {
+            var sb = new StringBuilder();
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("[");
+            }
+            sb.append("1");
+            for (int i = 0; i < Json.MAX_DEPTH + 1; i++) {
+                sb.append("]");
+            }
+
+            var ex = assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+            assertTrue(ex.getMessage().contains("nesting depth"));
+            assertTrue(ex.getMessage().contains(String.valueOf(Json.MAX_DEPTH)));
+        }
+
+        @Test
+        void lengthErrorMessageIsClear() {
+            var sb = new StringBuilder("\"");
+            sb.append("x".repeat(Json.MAX_INPUT_LENGTH));
+            sb.append("\"");
+
+            var ex = assertThrows(IllegalArgumentException.class,
+                    () -> Json.decode(sb.toString()));
+            assertTrue(ex.getMessage().contains("maximum length"));
         }
     }
 }
