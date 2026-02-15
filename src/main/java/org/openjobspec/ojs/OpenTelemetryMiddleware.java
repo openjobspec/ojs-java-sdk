@@ -50,12 +50,11 @@ public final class OpenTelemetryMiddleware {
 
             var start = Instant.now();
             try {
-                var result = next.handle(ctx);
+                next.handle(ctx);
                 var duration = Duration.between(start, Instant.now());
 
                 hooks.spanEnd(jobType, queue, duration, null);
                 hooks.recordCompleted(jobType, queue, duration);
-                return result;
             } catch (Exception e) {
                 var duration = Duration.between(start, Instant.now());
 
