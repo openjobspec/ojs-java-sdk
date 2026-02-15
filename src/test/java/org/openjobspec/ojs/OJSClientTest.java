@@ -1033,6 +1033,87 @@ class OJSClientTest {
                     .build();
             assertNotNull(client);
         }
+
+        @Test
+        void builderWithRetryOptions() {
+            var client = OJSClient.builder()
+                    .url("http://localhost:8080")
+                    .maxRetries(3)
+                    .initialBackoff(Duration.ofMillis(500))
+                    .maxBackoff(Duration.ofSeconds(5))
+                    .build();
+            assertNotNull(client);
+        }
+
+        @Test
+        void builderWithMaxRetriesOnly() {
+            var client = OJSClient.builder()
+                    .url("http://localhost:8080")
+                    .maxRetries(2)
+                    .build();
+            assertNotNull(client);
+        }
+
+        @Test
+        void builderWithZeroRetriesDisablesRetry() {
+            var client = OJSClient.builder()
+                    .url("http://localhost:8080")
+                    .maxRetries(0)
+                    .build();
+            assertNotNull(client);
+        }
+
+        @Test
+        void builderWithCustomHttpClient() {
+            var httpClient = java.net.http.HttpClient.newBuilder().build();
+            var client = OJSClient.builder()
+                    .url("http://localhost:8080")
+                    .httpClient(httpClient)
+                    .build();
+            assertNotNull(client);
+        }
+
+        @Test
+        void withTransportCreatesClient() {
+            var transport = new org.openjobspec.ojs.transport.Transport() {
+                @Override public Map<String, Object> get(String path) { return Map.of(); }
+                @Override public Map<String, Object> post(String path, Map<String, Object> body) { return Map.of(); }
+                @Override public Map<String, Object> delete(String path) { return Map.of(); }
+            };
+            var client = OJSClient.withTransport(transport);
+            assertNotNull(client);
+        }
+
+        @Test
+        void withTransportRejectsNull() {
+            assertThrows(NullPointerException.class,
+                    () -> OJSClient.withTransport(null));
+        }
+
+        @Test
+        void clientIsAutoCloseable() {
+            var client = OJSClient.builder()
+                    .url("http://localhost:8080")
+                    .build();
+            assertInstanceOf(AutoCloseable.class, client);
+            assertDoesNotThrow(client::close);
+        }
+
+        @Test
+        void syncOperationsWorkAfterClose() {
+            var transport = new org.openjobspec.ojs.transport.Transport() {
+                @Override public Map<String, Object> get(String path) {
+                    return Map.of("job", Map.of("id", "1", "type", "test", "state", "available"));
+                }
+                @Override public Map<String, Object> post(String path, Map<String, Object> body) {
+                    return Map.of("job", Map.of("id", "1", "type", "test", "state", "available"));
+                }
+                @Override public Map<String, Object> delete(String path) { return Map.of(); }
+            };
+            var client = OJSClient.withTransport(transport);
+            client.close();
+            assertDoesNotThrow(() -> client.getJob("1"));
+        }
     }
 
     // -----------------------------------------------------------------------

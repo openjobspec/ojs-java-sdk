@@ -1,6 +1,7 @@
 package org.openjobspec.ojs;
 
 import org.openjobspec.ojs.transport.HttpTransport;
+import org.openjobspec.ojs.transport.RetryableTransport;
 import org.openjobspec.ojs.transport.Transport;
 
 import java.net.URLEncoder;
@@ -9,6 +10,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * OJS client for enqueuing jobs, managing workflows, and querying job status.
@@ -29,12 +33,14 @@ import java.util.*;
  *     .send();
  * }</pre>
  */
-public final class OJSClient {
+public final class OJSClient implements AutoCloseable {
 
     private final Transport transport;
+    private final ExecutorService asyncExecutor;
 
     private OJSClient(Transport transport) {
         this.transport = transport;
+        this.asyncExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     /** Create a client with a custom transport (for testing or non-HTTP transports). */
@@ -205,6 +211,88 @@ public final class OJSClient {
         transport.delete("/workflows/" + id);
     }
 
+    // --- Async Operations ---
+
+    /**
+     * Asynchronously enqueue a job with default options.
+     *
+     * @param type the job type
+     * @param args the job arguments
+     * @return a future that completes with the created job
+     */
+    public CompletableFuture<Job> enqueueAsync(String type, Map<String, Object> args) {
+        return CompletableFuture.supplyAsync(() -> enqueue(type, args), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously enqueue multiple jobs.
+     *
+     * @param requests the job requests
+     * @return a future that completes with the created jobs
+     */
+    public CompletableFuture<List<Job>> enqueueBatchAsync(List<Map<String, Object>> requests) {
+        return CompletableFuture.supplyAsync(() -> enqueueBatch(requests), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously get a job by ID.
+     *
+     * @param id the job ID
+     * @return a future that completes with the job
+     */
+    public CompletableFuture<Job> getJobAsync(String id) {
+        return CompletableFuture.supplyAsync(() -> getJob(id), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously cancel a job.
+     *
+     * @param id the job ID
+     * @return a future that completes with the cancelled job
+     */
+    public CompletableFuture<Job> cancelJobAsync(String id) {
+        return CompletableFuture.supplyAsync(() -> cancelJob(id), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously check server health.
+     *
+     * @return a future that completes with the health status
+     */
+    public CompletableFuture<Map<String, Object>> healthAsync() {
+        return CompletableFuture.supplyAsync(this::health, asyncExecutor);
+    }
+
+    /**
+     * Asynchronously create a workflow.
+     *
+     * @param definition the workflow definition
+     * @return a future that completes with the workflow status
+     */
+    public CompletableFuture<Workflow.WorkflowStatus> createWorkflowAsync(Workflow.Definition definition) {
+        return CompletableFuture.supplyAsync(() -> createWorkflow(definition), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously get a workflow by ID.
+     *
+     * @param id the workflow ID
+     * @return a future that completes with the workflow status
+     */
+    public CompletableFuture<Workflow.WorkflowStatus> getWorkflowAsync(String id) {
+        return CompletableFuture.supplyAsync(() -> getWorkflow(id), asyncExecutor);
+    }
+
+    /**
+     * Close the client, shutting down the internal async executor.
+     * Synchronous operations remain functional after close; only async
+     * operations will reject new tasks.
+     */
+    @Override
+    public void close() {
+        asyncExecutor.shutdown();
+    }
+
     // --- Internal Helpers ---
 
     @SuppressWarnings("unchecked")
@@ -342,6 +430,9 @@ public final class OJSClient {
         private HttpClient httpClient;
         private String authToken;
         private Map<String, String> headers;
+        private int maxRetries = 0;
+        private Duration initialBackoff;
+        private Duration maxBackoff;
 
         private Builder() {}
 
@@ -365,14 +456,63 @@ public final class OJSClient {
             return this;
         }
 
+        /**
+         * Enable automatic retries for transient errors with exponential backoff.
+         *
+         * @param maxRetries maximum number of retries (0 to disable, default: 0)
+         * @return this builder
+         */
+        public Builder maxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+            return this;
+        }
+
+        /**
+         * Set the initial backoff duration for retries (default: 200ms).
+         * Requires {@code maxRetries > 0} to take effect.
+         *
+         * @param initialBackoff the initial backoff duration
+         * @return this builder
+         */
+        public Builder initialBackoff(Duration initialBackoff) {
+            this.initialBackoff = initialBackoff;
+            return this;
+        }
+
+        /**
+         * Set the maximum backoff duration cap for retries (default: 10s).
+         * Requires {@code maxRetries > 0} to take effect.
+         *
+         * @param maxBackoff the maximum backoff duration
+         * @return this builder
+         */
+        public Builder maxBackoff(Duration maxBackoff) {
+            this.maxBackoff = maxBackoff;
+            return this;
+        }
+
         public OJSClient build() {
             Objects.requireNonNull(url, "url must not be null");
-            var transport = HttpTransport.builder()
+            Transport transport = HttpTransport.builder()
                     .url(url)
                     .httpClient(httpClient)
                     .authToken(authToken)
                     .headers(headers)
                     .build();
+
+            if (maxRetries > 0) {
+                var retryBuilder = RetryableTransport.builder()
+                        .delegate(transport)
+                        .maxRetries(maxRetries);
+                if (initialBackoff != null) {
+                    retryBuilder.initialBackoff(initialBackoff);
+                }
+                if (maxBackoff != null) {
+                    retryBuilder.maxBackoff(maxBackoff);
+                }
+                transport = retryBuilder.build();
+            }
+
             return new OJSClient(transport);
         }
     }
