@@ -175,7 +175,8 @@ class OJSWorkerTransportTest {
                 @SuppressWarnings("unchecked")
                 var error = (Map<String, Object>) body.get("error");
                 assertNotNull(error);
-                assertEquals("RuntimeException", error.get("type"));
+                assertEquals("RuntimeException", ((Map<String, Object>) error.get("details")).get("error_class"));
+                assertEquals("handler_error", error.get("code"));
                 assertEquals("Something went wrong", error.get("message"));
                 return true;
             }));
@@ -219,7 +220,7 @@ class OJSWorkerTransportTest {
                 assertEquals("job_3", body.get("job_id"));
                 @SuppressWarnings("unchecked")
                 var error = (Map<String, Object>) body.get("error");
-                assertEquals("handler_not_found", error.get("type"));
+                assertEquals("handler_not_found", error.get("code"));
                 return true;
             }));
         }

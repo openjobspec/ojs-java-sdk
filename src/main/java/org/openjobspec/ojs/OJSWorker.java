@@ -298,7 +298,8 @@ public final class OJSWorker {
                 logger.log(Level.WARNING, "Worker {0} no handler for job type: {1}",
                         workerId, job.type());
                 nackJob(job.id(), "handler_not_found",
-                        "No handler registered for job type: " + job.type());
+                        "No handler registered for job type: " + job.type(),
+                        false, null);
                 return;
             }
 
@@ -324,7 +325,8 @@ public final class OJSWorker {
         } catch (Exception e) {
             logger.log(Level.DEBUG, "Worker {0} job {1} failed: {2}",
                     workerId, job.id(), e.getMessage());
-            nackJob(job.id(), e.getClass().getSimpleName(), e.getMessage());
+            nackJob(job.id(), "handler_error", e.getMessage(),
+                    true, Map.of("error_class", e.getClass().getSimpleName()));
         } finally {
             activeJobs.remove(job.id());
             activeCount.decrementAndGet();
@@ -359,13 +361,22 @@ public final class OJSWorker {
         transport.post("/workers/ack", request);
     }
 
-    private void nackJob(String jobId, String errorType, String message) {
+    private void nackJob(String jobId, String errorCode, String message) {
+        nackJob(jobId, errorCode, message, true, null);
+    }
+
+    private void nackJob(String jobId, String errorCode, String message,
+                         boolean retryable, Map<String, Object> details) {
         var request = new LinkedHashMap<String, Object>();
         request.put("job_id", jobId);
 
         var error = new LinkedHashMap<String, Object>();
-        error.put("type", errorType);
+        error.put("code", errorCode);
         error.put("message", message != null ? message : "Unknown error");
+        error.put("retryable", retryable);
+        if (details != null && !details.isEmpty()) {
+            error.put("details", details);
+        }
         request.put("error", error);
 
         try {
