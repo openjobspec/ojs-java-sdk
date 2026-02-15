@@ -1,3 +1,6 @@
+///usr/bin/env jbang "$0" "$@" ; exit $?
+//DEPS org.openjobspec:ojs-sdk:0.1.0
+
 import org.openjobspec.ojs.*;
 
 import java.time.Duration;
