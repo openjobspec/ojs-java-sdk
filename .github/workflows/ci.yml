@@ -47,7 +47,7 @@ jobs:
 
       - name: Commit coverage badge
         if: matrix.java-version == 21 && github.ref == 'refs/heads/main'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "ci: update coverage badge [skip ci]"
           file_pattern: ".github/badges/*.svg"
