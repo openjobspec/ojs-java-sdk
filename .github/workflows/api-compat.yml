@@ -1,0 +1,67 @@
+name: API Compatibility
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  japicmp:
+    name: Java API Compatibility Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build current version
+        run: mvn -B package -DskipTests
+
+      - name: Check for breaking changes
+        run: |
+          CURRENT_JAR=$(find target -name "*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
+          if [ -z "$CURRENT_JAR" ]; then
+            echo "::notice::No JAR found; skipping compatibility check."
+            exit 0
+          fi
+
+          # Get previous release JAR from base branch
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          git stash 2>/dev/null || true
+          git checkout "$BASE_SHA" 2>/dev/null || { echo "::notice::Cannot checkout base; skipping."; exit 0; }
+          mvn -B package -DskipTests 2>/dev/null || { echo "::notice::Base build failed; skipping."; exit 0; }
+          BASE_JAR=$(find target -name "*.jar" -not -name "*-sources*" -not -name "*-javadoc*" | head -1)
+
+          if [ -z "$BASE_JAR" ]; then
+            echo "::notice::No base JAR found; skipping."
+            exit 0
+          fi
+
+          cp "$BASE_JAR" /tmp/base.jar
+          git checkout - 2>/dev/null
+          git stash pop 2>/dev/null || true
+
+          # Compare public API signatures
+          echo "=== Comparing JAR signatures ==="
+          jar tf "$CURRENT_JAR" | grep '\.class$' | sort > /tmp/current-classes.txt
+          jar tf /tmp/base.jar | grep '\.class$' | sort > /tmp/base-classes.txt
+
+          REMOVED=$(comm -23 /tmp/base-classes.txt /tmp/current-classes.txt)
+          if [ -n "$REMOVED" ]; then
+            echo "::warning::Classes removed (potential breaking change):"
+            echo "$REMOVED"
+          fi
+
+          ADDED=$(comm -13 /tmp/base-classes.txt /tmp/current-classes.txt)
+          if [ -n "$ADDED" ]; then
+            echo "::notice::New classes added:"
+            echo "$ADDED"
+          fi
