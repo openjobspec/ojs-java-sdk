@@ -159,6 +159,39 @@ client.createWorkflow(batch);
 | `heartbeatInterval` | `5s` | Heartbeat frequency |
 | `pollInterval` | `1s` | Polling frequency when idle |
 
+## JSON Serialization
+
+The SDK includes a **built-in JSON parser** (zero dependencies) that handles all OJS types out of the box. No additional libraries are required.
+
+### Built-in Parser (Default)
+
+The built-in parser uses `java.net.http.HttpClient` and supports all OJS types (Job, RetryPolicy, UniquePolicy, Workflow, etc.) with safety limits (max depth 128, max input 10 MB).
+
+```java
+// Works out of the box — no Jackson needed
+var client = OJSClient.builder()
+    .url("http://localhost:8080")
+    .build();
+
+var job = client.enqueue("email.send", Map.of("to", "user@example.com"));
+```
+
+### Optional Jackson Support
+
+If your project already uses Jackson, the SDK types include Jackson annotations (`@JsonProperty`, `@JsonCreator`) for seamless integration with your existing serialization pipeline. To use Jackson, add it as a dependency alongside the SDK:
+
+```xml
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+    <version>2.17.0</version>
+</dependency>
+```
+
+**When to use which:**
+- **Built-in parser** (default): Lightweight projects, microservices, or when minimizing dependencies.
+- **Jackson**: When your project already uses Jackson, or when you need custom serialization (e.g., date formats, naming strategies, mixins).
+
 ## Building
 
 ```bash
