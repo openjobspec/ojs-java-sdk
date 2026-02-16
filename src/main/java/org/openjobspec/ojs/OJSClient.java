@@ -194,6 +194,32 @@ public final class OJSClient implements AutoCloseable {
         transport.post("/queues/" + name + "/resume", Map.of());
     }
 
+    // --- Schema Management ---
+
+    public List<Map<String, Object>> listSchemas() {
+        var response = transport.get("/schemas");
+        @SuppressWarnings("unchecked")
+        var schemas = (List<Map<String, Object>>) response.get("schemas");
+        return schemas != null ? schemas : List.of();
+    }
+
+    public Map<String, Object> registerSchema(String uri, String type, String version, Map<String, Object> schema) {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("uri", uri);
+        body.put("type", type);
+        body.put("version", version);
+        body.put("schema", schema);
+        return transport.post("/schemas", body);
+    }
+
+    public Map<String, Object> getSchema(String uri) {
+        return transport.get("/schemas/" + URLEncoder.encode(uri, StandardCharsets.UTF_8));
+    }
+
+    public void deleteSchema(String uri) {
+        transport.delete("/schemas/" + URLEncoder.encode(uri, StandardCharsets.UTF_8));
+    }
+
     // --- Workflows ---
 
     public Workflow.WorkflowStatus createWorkflow(Workflow.Definition definition) {

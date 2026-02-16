@@ -372,6 +372,98 @@ class OJSClientTransportTest {
     }
 
     // -----------------------------------------------------------------------
+    // Schema Management
+    // -----------------------------------------------------------------------
+
+    @Nested
+    class SchemaTests {
+
+        @Test
+        void listSchemasCallsCorrectEndpoint() {
+            var schemas = List.<Map<String, Object>>of(
+                    Map.of("uri", "urn:ojs:email.send:v1", "type", "email.send", "version", "1"),
+                    Map.of("uri", "urn:ojs:report.gen:v1", "type", "report.gen", "version", "1")
+            );
+            when(transport.get("/schemas")).thenReturn(Map.of("schemas", schemas));
+
+            var result = client.listSchemas();
+
+            verify(transport).get("/schemas");
+            assertEquals(2, result.size());
+            assertEquals("urn:ojs:email.send:v1", result.get(0).get("uri"));
+        }
+
+        @Test
+        void listSchemasReturnsEmptyListWhenNull() {
+            when(transport.get("/schemas")).thenReturn(Map.of());
+
+            var result = client.listSchemas();
+
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        void registerSchemaPostsToCorrectEndpoint() {
+            var response = Map.<String, Object>of(
+                    "uri", "urn:ojs:email.send:v1",
+                    "type", "email.send",
+                    "version", "1",
+                    "created_at", "2025-01-15T09:00:00Z"
+            );
+            when(transport.post(eq("/schemas"), any())).thenReturn(response);
+
+            var schema = Map.<String, Object>of("type", "object");
+            var result = client.registerSchema("urn:ojs:email.send:v1", "email.send", "1", schema);
+
+            verify(transport).post(eq("/schemas"), argThat(body -> {
+                assertEquals("urn:ojs:email.send:v1", body.get("uri"));
+                assertEquals("email.send", body.get("type"));
+                assertEquals("1", body.get("version"));
+                assertNotNull(body.get("schema"));
+                return true;
+            }));
+            assertEquals("urn:ojs:email.send:v1", result.get("uri"));
+            assertEquals("2025-01-15T09:00:00Z", result.get("created_at"));
+        }
+
+        @Test
+        void getSchemaCallsCorrectEndpointWithEncodedUri() {
+            var response = Map.<String, Object>of(
+                    "uri", "urn:ojs:email.send:v1",
+                    "type", "email.send",
+                    "version", "1"
+            );
+            when(transport.get("/schemas/urn%3Aojs%3Aemail.send%3Av1")).thenReturn(response);
+
+            var result = client.getSchema("urn:ojs:email.send:v1");
+
+            verify(transport).get("/schemas/urn%3Aojs%3Aemail.send%3Av1");
+            assertEquals("urn:ojs:email.send:v1", result.get("uri"));
+        }
+
+        @Test
+        void deleteSchemaCallsDeleteWithEncodedUri() {
+            when(transport.delete("/schemas/urn%3Aojs%3Aemail.send%3Av1")).thenReturn(Map.of());
+
+            client.deleteSchema("urn:ojs:email.send:v1");
+
+            verify(transport).delete("/schemas/urn%3Aojs%3Aemail.send%3Av1");
+        }
+
+        @Test
+        void getSchemaThrowsNotFound() {
+            when(transport.get(startsWith("/schemas/")))
+                    .thenThrow(new OJSException(new OJSError.ApiError(
+                            "not_found", "Schema not found", false,
+                            Map.of(), null, 404)));
+
+            var ex = assertThrows(OJSException.class,
+                    () -> client.getSchema("urn:ojs:nonexistent:v1"));
+            assertTrue(ex.isNotFound());
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Dead Letter Queue
     // -----------------------------------------------------------------------
 
