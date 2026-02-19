@@ -7,6 +7,8 @@
 
 Official [Open Job Spec](https://openjobspec.org) SDK for Java 21+.
 
+> **🚀 Try it now:** [Open in Playground](https://playground.openjobspec.org?lang=java) · [Run on CodeSandbox](https://codesandbox.io/p/sandbox/openjobspec-java-quickstart) · [Docker Quickstart](https://github.com/openjobspec/openjobspec/blob/main/docker-compose.quickstart.yml)
+
 ## Features
 
 - **Java 21+** -- records, sealed interfaces, virtual threads (Project Loom)
