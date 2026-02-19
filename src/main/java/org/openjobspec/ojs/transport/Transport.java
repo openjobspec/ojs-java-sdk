@@ -11,7 +11,7 @@ import java.util.Map;
 public interface Transport {
 
     String OJS_CONTENT_TYPE = "application/openjobspec+json";
-    String OJS_VERSION = "1.0.0-rc.1";
+    String OJS_VERSION = "1.0";
     String BASE_PATH = "/ojs/v1";
 
     /**

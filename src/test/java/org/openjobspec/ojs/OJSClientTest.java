@@ -76,7 +76,7 @@ class OJSClientTest {
             var tagsList = List.<Object>of("urgent", "transactional");
 
             var jobMap = new HashMap<String, Object>();
-            jobMap.put("specversion", "1.0.0-rc.1");
+            jobMap.put("specversion", "1.0");
             jobMap.put("id", "01912f4e-fd1a-7000-8000-000000000002");
             jobMap.put("type", "email.send");
             jobMap.put("queue", "emails");
@@ -101,7 +101,7 @@ class OJSClientTest {
 
             Job job = OJSClient.parseJob(response);
 
-            assertEquals("1.0.0-rc.1", job.specversion());
+            assertEquals("1.0", job.specversion());
             assertEquals("01912f4e-fd1a-7000-8000-000000000002", job.id());
             assertEquals("email.send", job.type());
             assertEquals("emails", job.queue());

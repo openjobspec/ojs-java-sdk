@@ -35,7 +35,7 @@ public record Job(
         List<String> tags
 ) {
 
-    public static final String SPEC_VERSION = "1.0.0-rc.1";
+    public static final String SPEC_VERSION = "1.0";
 
     public Job {
         Objects.requireNonNull(type, "type must not be null");
