@@ -36,8 +36,16 @@ public sealed interface OJSError {
             boolean retryable,
             Map<String, Object> details,
             String requestId,
-            int httpStatus
+            int httpStatus,
+            long retryAfterSeconds
     ) implements OJSError {
+
+        /** Convenience constructor without retryAfterSeconds (defaults to -1: not present). */
+        public ApiError(String code, String message, boolean retryable,
+                        Map<String, Object> details, String requestId, int httpStatus) {
+            this(code, message, retryable, details, requestId, httpStatus, -1);
+        }
+
         @Override
         public String toString() {
             var sb = new StringBuilder("ojs: ").append(code).append(": ").append(message);

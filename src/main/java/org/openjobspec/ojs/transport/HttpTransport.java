@@ -9,6 +9,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -131,6 +135,7 @@ public final class HttpTransport implements Transport {
     private OJSError parseError(HttpResponse<String> response) {
         var body = response.body();
         int status = response.statusCode();
+        long retryAfter = parseRetryAfter(response);
 
         if (body != null && !body.isBlank()) {
             try {
@@ -149,7 +154,7 @@ public final class HttpTransport implements Transport {
                                 .firstValue("X-Request-Id").orElse(null);
 
                         return new OJSError.ApiError(code, message, retryable,
-                                details, requestId, status);
+                                details, requestId, status, retryAfter);
                     }
                 }
             } catch (Exception ignored) {
@@ -159,7 +164,37 @@ public final class HttpTransport implements Transport {
 
         return new OJSError.ApiError("http_" + status,
                 "HTTP " + status + (body != null ? ": " + body : ""),
-                status == 429 || status >= 500, Map.of(), null, status);
+                status == 429 || status >= 500, Map.of(), null, status, retryAfter);
+    }
+
+    /**
+     * Parse the Retry-After header from the response.
+     * Supports both delay-seconds (e.g. "120") and HTTP-date formats.
+     *
+     * @return the retry-after value in seconds, or -1 if not present or unparseable
+     */
+    static long parseRetryAfter(HttpResponse<?> response) {
+        var header = response.headers().firstValue("Retry-After").orElse(null);
+        if (header == null || header.isBlank()) {
+            return -1;
+        }
+
+        // Try parsing as integer seconds first
+        try {
+            long seconds = Long.parseLong(header.trim());
+            return Math.max(0, seconds);
+        } catch (NumberFormatException ignored) {
+            // Not an integer, try HTTP-date format
+        }
+
+        // Try parsing as HTTP-date (RFC 7231)
+        try {
+            var date = ZonedDateTime.parse(header.trim(), DateTimeFormatter.RFC_1123_DATE_TIME);
+            long seconds = ChronoUnit.SECONDS.between(ZonedDateTime.now(date.getZone()), date);
+            return Math.max(0, seconds);
+        } catch (DateTimeParseException ignored) {
+            return -1;
+        }
     }
 
     private static String stringOrDefault(Object value, String defaultValue) {

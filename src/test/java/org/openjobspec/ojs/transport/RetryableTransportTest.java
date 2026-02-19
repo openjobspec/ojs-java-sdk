@@ -62,6 +62,7 @@ class RetryableTransportTest {
                     .maxRetries(5)
                     .initialBackoff(Duration.ofMillis(100))
                     .maxBackoff(Duration.ofSeconds(5))
+                    .enabled(true)
                     .build();
             assertNotNull(transport);
         }
@@ -205,6 +206,170 @@ class RetryableTransportTest {
     }
 
     // -----------------------------------------------------------------------
+    // Retry-After header support
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Retry-After backoff")
+    class RetryAfterTests {
+
+        @Test
+        void retrysWith429AndRetryAfterHeader() {
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(rateLimitedWithRetryAfter(2))
+                    .thenReturn(Map.of("id", "1"));
+
+            var transport = buildRetryable(3);
+            var result = transport.get("/jobs/1");
+
+            assertEquals("1", result.get("id"));
+            verify(delegate, times(2)).get("/jobs/1");
+        }
+
+        @Test
+        void maxRetriesExhaustedWith429() {
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(rateLimitedWithRetryAfter(1));
+
+            var transport = buildRetryable(2);
+
+            var ex = assertThrows(OJSException.class,
+                    () -> transport.get("/jobs/1"));
+            assertTrue(ex.isRateLimited());
+            verify(delegate, times(3)).get("/jobs/1"); // 1 initial + 2 retries
+        }
+
+        @Test
+        void non429NotRetried() {
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(nonRetryableException("not_found", "Not found"));
+
+            var transport = buildRetryable(3);
+
+            assertThrows(OJSException.class, () -> transport.get("/jobs/1"));
+            verify(delegate, times(1)).get("/jobs/1");
+        }
+
+        @Test
+        void disabledRetryDoesNotRetry() {
+            when(delegate.get("/health"))
+                    .thenThrow(rateLimitedWithRetryAfter(1));
+
+            var transport = RetryableTransport.builder()
+                    .delegate(delegate)
+                    .maxRetries(3)
+                    .initialBackoff(Duration.ofMillis(1))
+                    .maxBackoff(Duration.ofMillis(10))
+                    .enabled(false)
+                    .build();
+
+            assertThrows(OJSException.class, () -> transport.get("/health"));
+            verify(delegate, times(1)).get("/health");
+        }
+
+        @Test
+        void retryAfterCappedByMaxBackoff() {
+            // retryAfterSeconds=999 but maxBackoff=10ms; should not hang
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(rateLimitedWithRetryAfter(999))
+                    .thenReturn(Map.of("id", "1"));
+
+            var transport = buildRetryable(1);
+            var start = System.currentTimeMillis();
+            var result = transport.get("/jobs/1");
+            var elapsed = System.currentTimeMillis() - start;
+
+            assertEquals("1", result.get("id"));
+            // maxBackoff is 10ms, so this should be very fast
+            assertTrue(elapsed < 1000, "Expected fast retry but took " + elapsed + "ms");
+        }
+
+        @Test
+        void fallsBackToExponentialWithoutRetryAfter() {
+            // Rate limited but retryAfterSeconds=-1 (no Retry-After header)
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(new OJSException(new OJSError.ApiError(
+                            "rate_limited", "Too many requests", true,
+                            Map.of(), null, 429, -1)))
+                    .thenReturn(Map.of("id", "1"));
+
+            var transport = buildRetryable(3);
+            var result = transport.get("/jobs/1");
+
+            assertEquals("1", result.get("id"));
+            verify(delegate, times(2)).get("/jobs/1");
+        }
+        @Test
+        void interruptDuringSleepThrowsWithInterruptFlag() {
+            when(delegate.get("/jobs/1"))
+                    .thenThrow(rateLimitedWithRetryAfter(999));
+
+            var transport = RetryableTransport.builder()
+                    .delegate(delegate)
+                    .maxRetries(3)
+                    .initialBackoff(Duration.ofMillis(1))
+                    .maxBackoff(Duration.ofSeconds(60))
+                    .build();
+
+            // Interrupt the current thread before calling — Thread.sleep will
+            // throw InterruptedException immediately.
+            Thread.currentThread().interrupt();
+
+            var ex = assertThrows(OJSException.class, () -> transport.get("/jobs/1"));
+            assertEquals("retry_interrupted", ex.code());
+            assertTrue(Thread.currentThread().isInterrupted());
+
+            // Clear the interrupt flag to avoid polluting other tests
+            Thread.interrupted();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // RetryConfig support
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("RetryConfig")
+    class RetryConfigTests {
+
+        @Test
+        void wrapReturnsRetryableTransportWhenEnabled() {
+            var config = RetryConfig.defaults();
+            var transport = RetryableTransport.wrap(delegate, config);
+            assertInstanceOf(RetryableTransport.class, transport);
+        }
+
+        @Test
+        void wrapReturnsDelegateWhenDisabled() {
+            var config = RetryConfig.disabled();
+            var transport = RetryableTransport.wrap(delegate, config);
+            assertSame(delegate, transport);
+        }
+
+        @Test
+        void wrapReturnsDelegateWhenZeroRetries() {
+            var config = new RetryConfig(0, Duration.ofMillis(100), Duration.ofSeconds(5), true);
+            var transport = RetryableTransport.wrap(delegate, config);
+            assertSame(delegate, transport);
+        }
+
+        @Test
+        void retryConfigDefaultsAreValid() {
+            var config = RetryConfig.defaults();
+            assertEquals(3, config.maxRetries());
+            assertEquals(Duration.ofMillis(500), config.minBackoff());
+            assertEquals(Duration.ofSeconds(30), config.maxBackoff());
+            assertTrue(config.enabled());
+        }
+
+        @Test
+        void retryConfigRejectsNegativeMaxRetries() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new RetryConfig(-1, Duration.ofMillis(100), Duration.ofSeconds(5), true));
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
@@ -225,5 +390,11 @@ class RetryableTransportTest {
     private OJSException nonRetryableException(String code, String message) {
         return new OJSException(
                 new OJSError.ApiError(code, message, false, Map.of(), null, 422));
+    }
+
+    private OJSException rateLimitedWithRetryAfter(long retryAfterSeconds) {
+        return new OJSException(new OJSError.ApiError(
+                "rate_limited", "Too many requests", true,
+                Map.of(), null, 429, retryAfterSeconds));
     }
 }

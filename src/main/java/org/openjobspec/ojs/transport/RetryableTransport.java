@@ -1,5 +1,6 @@
 package org.openjobspec.ojs.transport;
 
+import org.openjobspec.ojs.OJSError;
 import org.openjobspec.ojs.OJSError.OJSException;
 
 import java.time.Duration;
@@ -10,8 +11,10 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Transport decorator that retries failed requests when the error is retryable.
  *
- * <p>Uses exponential backoff with jitter. Only retries on
- * {@link OJSException} where {@code isRetryable()} returns {@code true}.
+ * <p>Uses exponential backoff with jitter. When a 429 response includes a
+ * {@code Retry-After} header, that value is used as the backoff delay instead
+ * of exponential backoff. Only retries on {@link OJSException} where
+ * {@code isRetryable()} returns {@code true}.
  *
  * <pre>{@code
  * var transport = RetryableTransport.builder()
@@ -19,6 +22,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *     .maxRetries(3)
  *     .initialBackoff(Duration.ofMillis(200))
  *     .build();
+ *
+ * // Or using RetryConfig:
+ * var transport = RetryableTransport.wrap(httpTransport, RetryConfig.defaults());
  * }</pre>
  */
 public final class RetryableTransport implements Transport {
@@ -29,12 +35,35 @@ public final class RetryableTransport implements Transport {
     private final int maxRetries;
     private final Duration initialBackoff;
     private final Duration maxBackoff;
+    private final boolean enabled;
 
     private RetryableTransport(Builder builder) {
         this.delegate = builder.delegate;
         this.maxRetries = builder.maxRetries;
         this.initialBackoff = builder.initialBackoff;
         this.maxBackoff = builder.maxBackoff;
+        this.enabled = builder.enabled;
+    }
+
+    /**
+     * Wrap a transport with retry behavior using the given configuration.
+     *
+     * @param delegate   the underlying transport
+     * @param retryConfig the retry configuration
+     * @return a retryable transport, or the delegate itself if retries are disabled
+     */
+    public static Transport wrap(Transport delegate, RetryConfig retryConfig) {
+        Objects.requireNonNull(delegate, "delegate must not be null");
+        Objects.requireNonNull(retryConfig, "retryConfig must not be null");
+        if (!retryConfig.enabled() || retryConfig.maxRetries() == 0) {
+            return delegate;
+        }
+        return builder()
+                .delegate(delegate)
+                .maxRetries(retryConfig.maxRetries())
+                .initialBackoff(retryConfig.minBackoff())
+                .maxBackoff(retryConfig.maxBackoff())
+                .build();
     }
 
     public static Builder builder() {
@@ -62,6 +91,10 @@ public final class RetryableTransport implements Transport {
     }
 
     private Map<String, Object> withRetry(TransportCall call, String description) {
+        if (!enabled) {
+            return call.execute();
+        }
+
         OJSException lastException = null;
 
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -74,7 +107,7 @@ public final class RetryableTransport implements Transport {
                     throw e;
                 }
 
-                long backoffMs = calculateBackoff(attempt);
+                long backoffMs = resolveBackoff(e, attempt);
                 logger.log(System.Logger.Level.DEBUG,
                         "Retrying {0} (attempt {1}/{2}, backoff {3}ms): {4}",
                         description, attempt + 1, maxRetries, backoffMs, e.getMessage());
@@ -83,7 +116,10 @@ public final class RetryableTransport implements Transport {
                     Thread.sleep(backoffMs);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw e;
+                    throw new OJSException(new OJSError.TransportError(
+                            "retry_interrupted",
+                            "Retry sleep interrupted",
+                            ie));
                 }
             }
         }
@@ -91,7 +127,33 @@ public final class RetryableTransport implements Transport {
         throw lastException;
     }
 
-    private long calculateBackoff(int attempt) {
+    /**
+     * Resolve the backoff duration. If the exception carries a Retry-After value
+     * (from a 429 response), use that (capped by maxBackoff). Otherwise fall back
+     * to exponential backoff with jitter.
+     */
+    private long resolveBackoff(OJSException e, int attempt) {
+        long retryAfterSeconds = extractRetryAfter(e);
+        if (retryAfterSeconds >= 0) {
+            long retryAfterMs = retryAfterSeconds * 1000;
+            return Math.min(retryAfterMs, maxBackoff.toMillis());
+        }
+        return calculateExponentialBackoff(attempt);
+    }
+
+    /**
+     * Extract the Retry-After seconds from an OJSException, if present.
+     *
+     * @return the Retry-After value in seconds, or -1 if not available
+     */
+    private static long extractRetryAfter(OJSException e) {
+        if (e.error() instanceof OJSError.ApiError apiError) {
+            return apiError.retryAfterSeconds();
+        }
+        return -1;
+    }
+
+    private long calculateExponentialBackoff(int attempt) {
         long baseMs = initialBackoff.toMillis() * (1L << attempt);
         long cappedMs = Math.min(baseMs, maxBackoff.toMillis());
         // Add jitter: 50-100% of the calculated backoff
@@ -108,6 +170,7 @@ public final class RetryableTransport implements Transport {
         private int maxRetries = 3;
         private Duration initialBackoff = Duration.ofMillis(200);
         private Duration maxBackoff = Duration.ofSeconds(10);
+        private boolean enabled = true;
 
         private Builder() {}
 
@@ -132,6 +195,12 @@ public final class RetryableTransport implements Transport {
         /** Maximum backoff duration cap (default: 10s). */
         public Builder maxBackoff(Duration maxBackoff) {
             this.maxBackoff = maxBackoff;
+            return this;
+        }
+
+        /** Enable or disable retries (default: true). */
+        public Builder enabled(boolean enabled) {
+            this.enabled = enabled;
             return this;
         }
 

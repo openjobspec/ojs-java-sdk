@@ -1,6 +1,7 @@
 package org.openjobspec.ojs;
 
 import org.openjobspec.ojs.transport.HttpTransport;
+import org.openjobspec.ojs.transport.RetryConfig;
 import org.openjobspec.ojs.transport.RetryableTransport;
 import org.openjobspec.ojs.transport.Transport;
 
@@ -459,6 +460,7 @@ public final class OJSClient implements AutoCloseable {
         private int maxRetries = 0;
         private Duration initialBackoff;
         private Duration maxBackoff;
+        private RetryConfig retryConfig;
 
         private Builder() {}
 
@@ -517,6 +519,19 @@ public final class OJSClient implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Set the retry configuration. When provided, overrides individual
+         * {@code maxRetries}, {@code initialBackoff}, and {@code maxBackoff} settings.
+         * Includes Retry-After header support for 429 responses.
+         *
+         * @param retryConfig the retry configuration
+         * @return this builder
+         */
+        public Builder retryConfig(RetryConfig retryConfig) {
+            this.retryConfig = retryConfig;
+            return this;
+        }
+
         public OJSClient build() {
             Objects.requireNonNull(url, "url must not be null");
             Transport transport = HttpTransport.builder()
@@ -526,7 +541,9 @@ public final class OJSClient implements AutoCloseable {
                     .headers(headers)
                     .build();
 
-            if (maxRetries > 0) {
+            if (retryConfig != null) {
+                transport = RetryableTransport.wrap(transport, retryConfig);
+            } else if (maxRetries > 0) {
                 var retryBuilder = RetryableTransport.builder()
                         .delegate(transport)
                         .maxRetries(maxRetries);
