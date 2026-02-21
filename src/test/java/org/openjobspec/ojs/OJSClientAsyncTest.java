@@ -97,3 +97,4 @@ class OJSClientAsyncTest {
         assertInstanceOf(OJSError.OJSException.class, ex.getCause());
     }
 }
+
