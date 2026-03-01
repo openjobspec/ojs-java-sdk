@@ -95,6 +95,21 @@ worker.start();
 
 ### Workflows
 
+OJS provides three workflow primitives — **chain** (sequential), **group** (parallel fan-out/fan-in), and **batch** (parallel with callbacks):
+
+```mermaid
+graph LR
+    subgraph Chain
+    A1[Step 1] --> A2[Step 2] --> A3[Step 3]
+    end
+```
+```mermaid
+graph TD
+    subgraph Group
+    S[Start] --> G1[Task A] & G2[Task B] & G3[Task C] --> J[All Complete]
+    end
+```
+
 ```java
 // Chain (sequential)
 var chain = Workflow.chain("order-processing",
@@ -193,6 +208,24 @@ If your project already uses Jackson, the SDK types include Jackson annotations 
 **When to use which:**
 - **Built-in parser** (default): Lightweight projects, microservices, or when minimizing dependencies.
 - **Jackson**: When your project already uses Jackson, or when you need custom serialization (e.g., date formats, naming strategies, mixins).
+
+## Real-Time Subscriptions
+
+Subscribe to job state changes via Server-Sent Events (SSE):
+
+```java
+// Subscribe to all events
+client.subscribe(event -> {
+    System.out.printf("Job %s: %s → %s%n",
+        event.jobId(), event.from(), event.to());
+});
+
+// Subscribe to a specific job
+client.subscribeJob(jobId, event -> { /* ... */ });
+
+// Subscribe to a queue
+client.subscribeQueue("emails", event -> { /* ... */ });
+```
 
 ## Building
 
