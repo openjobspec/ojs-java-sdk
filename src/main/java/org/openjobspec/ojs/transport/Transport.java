@@ -50,3 +50,4 @@ public interface Transport {
         throw new UnsupportedOperationException("getAbsolute not supported by this transport");
     }
 }
+
