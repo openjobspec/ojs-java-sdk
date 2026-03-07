@@ -34,3 +34,4 @@ This policy applies to the OJS Java SDK codebase. For vulnerabilities in the OJS
 ## Recognition
 
 We appreciate security researchers who help keep our project safe. Contributors who report valid security issues will be acknowledged in our release notes (unless they prefer to remain anonymous).
+
