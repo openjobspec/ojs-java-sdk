@@ -34,4 +34,59 @@ final class JacksonSupport {
                     "Add jackson-databind to your dependencies.", e);
         }
     }
+
+    /**
+     * Check if Jackson is available on the classpath.
+     *
+     * @return true if Jackson ObjectMapper can be loaded
+     */
+    static boolean isAvailable() {
+        try {
+            Class.forName("com.fasterxml.jackson.databind.ObjectMapper");
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Serialize an object to a JSON string.
+     *
+     * @param value the object to serialize
+     * @return the JSON string representation
+     * @throws java.io.IOException if serialization fails
+     */
+    static String serialize(Object value) throws java.io.IOException {
+        return requireMapper().writeValueAsString(value);
+    }
+
+    /**
+     * Deserialize a JSON string to the specified type.
+     *
+     * @param json  the JSON string
+     * @param clazz the target class
+     * @param <T>   the target type
+     * @return the deserialized object
+     * @throws java.io.IOException if deserialization fails
+     */
+    static <T> T deserialize(String json, Class<T> clazz) throws java.io.IOException {
+        return requireMapper().readValue(json, clazz);
+    }
+
+    /**
+     * Deserialize a specific field from a JSON object string.
+     *
+     * @param json  the JSON string containing the object
+     * @param field the field name to extract
+     * @param clazz the target class for the field value
+     * @param <T>   the target type
+     * @return the deserialized field value, or null if the field is missing
+     * @throws java.io.IOException if deserialization fails
+     */
+    static <T> T deserializeField(String json, String field, Class<T> clazz) throws java.io.IOException {
+        var tree = requireMapper().readTree(json);
+        var node = tree.get(field);
+        if (node == null || node.isNull()) return null;
+        return requireMapper().treeToValue(node, clazz);
+    }
 }

@@ -55,6 +55,7 @@ public final class OJSWorker {
     }
 
     private final Transport transport;
+    private final String serverUrl;
     private final String workerId;
     private final List<String> queues;
     private final int concurrency;
@@ -75,6 +76,7 @@ public final class OJSWorker {
     private record NamedMiddleware(String name, Middleware middleware) {}
 
     private OJSWorker(Builder builder) {
+        this.serverUrl = builder.url;
         this.transport = builder.transport != null ? builder.transport
                 : HttpTransport.builder()
                     .url(builder.url)
@@ -304,7 +306,7 @@ public final class OJSWorker {
             }
 
             var ctx = new JobContext(
-                    job, null, null,
+                    serverUrl, job, null, null,
                     jobId -> sendJobHeartbeat(jobId)
             );
 

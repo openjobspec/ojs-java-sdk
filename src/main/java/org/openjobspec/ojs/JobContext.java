@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class JobContext {
 
+    private final String serverUrl;
     private final Job job;
     private final String workflowId;
     private final Map<String, Object> parentResults;
@@ -20,11 +21,22 @@ public final class JobContext {
 
     JobContext(Job job, String workflowId, Map<String, Object> parentResults,
               HeartbeatSender heartbeatSender) {
+        this(null, job, workflowId, parentResults, heartbeatSender);
+    }
+
+    JobContext(String serverUrl, Job job, String workflowId, Map<String, Object> parentResults,
+              HeartbeatSender heartbeatSender) {
+        this.serverUrl = serverUrl;
         this.job = job;
         this.workflowId = workflowId;
         this.parentResults = parentResults != null ? parentResults : Map.of();
         this.resultRef = new AtomicReference<>();
         this.heartbeatSender = heartbeatSender;
+    }
+
+    /** The base server URL for direct HTTP calls (e.g. checkpoint operations). May be null. */
+    public String serverUrl() {
+        return serverUrl;
     }
 
     /** The job being processed. */
