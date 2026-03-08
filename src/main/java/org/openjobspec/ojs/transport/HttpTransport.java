@@ -82,7 +82,8 @@ public final class HttpTransport implements Transport {
                     .timeout(requestTimeout)
                     .header("Content-Type", OJS_CONTENT_TYPE)
                     .header("Accept", OJS_CONTENT_TYPE)
-                    .header("OJS-Version", OJS_VERSION);
+                    .header("OJS-Version", OJS_VERSION)
+                    .header("X-Request-ID", UUID.randomUUID().toString());
 
             if (authToken != null && !authToken.isEmpty()) {
                 requestBuilder.header("Authorization", "Bearer " + authToken);

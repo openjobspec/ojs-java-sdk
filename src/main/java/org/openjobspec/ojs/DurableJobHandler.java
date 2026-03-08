@@ -46,9 +46,13 @@ import java.util.concurrent.Callable;
  */
 public abstract class DurableJobHandler implements JobHandler {
 
-    private static final HttpClient CHECKPOINT_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(java.time.Duration.ofSeconds(10))
-            .build();
+    private final HttpClient checkpointClient;
+
+    protected DurableJobHandler() {
+        this.checkpointClient = HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
+    }
 
     /**
      * Save a checkpoint for the current job. The state is serialized to JSON and
@@ -70,7 +74,7 @@ public abstract class DurableJobHandler implements JobHandler {
                 .build();
 
         try {
-            CHECKPOINT_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            checkpointClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Checkpoint save interrupted", e);
@@ -92,7 +96,7 @@ public abstract class DurableJobHandler implements JobHandler {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = CHECKPOINT_CLIENT
+            HttpResponse<String> response = checkpointClient
                     .send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200 && response.body() != null) {
@@ -124,7 +128,7 @@ public abstract class DurableJobHandler implements JobHandler {
                 .build();
 
         try {
-            HttpResponse<String> response = CHECKPOINT_CLIENT
+            HttpResponse<String> response = checkpointClient
                     .send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 400 && response.statusCode() != 404) {
