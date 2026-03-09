@@ -47,6 +47,12 @@ public final class JobRequest {
 
     /** Set the target queue. Default: "default". */
     public JobRequest queue(String queue) {
+        Objects.requireNonNull(queue, "queue must not be null");
+        if (queue.isBlank()) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Queue name must not be blank"));
+        }
         this.queue = queue;
         return this;
     }
