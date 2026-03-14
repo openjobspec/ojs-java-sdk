@@ -3,6 +3,7 @@ package org.openjobspec.ojs;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Fluent builder for enqueuing jobs with options.
@@ -17,6 +18,11 @@ import java.util.*;
  * }</pre>
  */
 public final class JobRequest {
+
+    private static final Pattern TYPE_PATTERN = Pattern.compile("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$");
+    private static final Pattern QUEUE_PATTERN = Pattern.compile("^[a-z0-9]([a-z0-9]*[-.]?[a-z0-9]+)*$");
+    private static final int MAX_TYPE_LENGTH = 255;
+    private static final int MAX_QUEUE_LENGTH = 128;
 
     private final OJSClient client;
     private final String type;
@@ -41,6 +47,16 @@ public final class JobRequest {
                     new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
                             "Job type must not be blank"));
         }
+        if (type.length() > MAX_TYPE_LENGTH) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Job type must not exceed " + MAX_TYPE_LENGTH + " characters"));
+        }
+        if (!TYPE_PATTERN.matcher(type).matches()) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Invalid job type \"" + type + "\": must match ^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"));
+        }
         this.type = type;
         this.args = args != null ? args : Map.of();
     }
@@ -52,6 +68,16 @@ public final class JobRequest {
             throw new OJSError.OJSException(
                     new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
                             "Queue name must not be blank"));
+        }
+        if (queue.length() > MAX_QUEUE_LENGTH) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Queue name must not exceed " + MAX_QUEUE_LENGTH + " characters"));
+        }
+        if (!QUEUE_PATTERN.matcher(queue).matches()) {
+            throw new OJSError.OJSException(
+                    new OJSError.ValidationError(OJSError.CODE_INVALID_REQUEST,
+                            "Invalid queue name \"" + queue + "\": must match ^[a-z0-9][a-z0-9\\-.]*$"));
         }
         this.queue = queue;
         return this;

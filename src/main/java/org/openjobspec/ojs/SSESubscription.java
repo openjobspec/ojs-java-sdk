@@ -105,12 +105,13 @@ public final class SSESubscription implements AutoCloseable {
                             eventType = "";
                             eventId = "";
                             eventData = "";
-                        } else if (line.startsWith("event: ")) {
-                            eventType = line.substring(7);
-                        } else if (line.startsWith("id: ")) {
-                            eventId = line.substring(4);
-                        } else if (line.startsWith("data: ")) {
-                            eventData = line.substring(6);
+                        } else if (line.startsWith("event:")) {
+                            eventType = line.substring(6).stripLeading();
+                        } else if (line.startsWith("id:")) {
+                            eventId = line.substring(3).stripLeading();
+                        } else if (line.startsWith("data:")) {
+                            String chunk = line.substring(5).stripLeading();
+                            eventData = eventData.isEmpty() ? chunk : eventData + "\n" + chunk;
                         }
                     }
                 } finally {

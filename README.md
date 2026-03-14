@@ -26,14 +26,14 @@ Official [Open Job Spec](https://openjobspec.org) SDK for Java 21+.
 <dependency>
     <groupId>org.openjobspec</groupId>
     <artifactId>ojs-sdk</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 ### Gradle
 
 ```kotlin
-implementation("org.openjobspec:ojs-sdk:0.1.0")
+implementation("org.openjobspec:ojs-sdk:0.3.0")
 ```
 
 ## Quick Start
