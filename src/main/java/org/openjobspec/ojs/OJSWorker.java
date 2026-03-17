@@ -72,6 +72,8 @@ public final class OJSWorker {
     private final Semaphore semaphore;
     private volatile boolean stopped = false;
     private final CountDownLatch stopLatch = new CountDownLatch(1);
+    private final boolean handleSignals;
+    private volatile Thread shutdownHookThread;
 
     private record NamedMiddleware(String name, Middleware middleware) {}
 
@@ -94,6 +96,7 @@ public final class OJSWorker {
                 ? builder.pollInterval : Duration.ofSeconds(1);
         this.labels = builder.labels != null ? List.copyOf(builder.labels) : List.of();
         this.semaphore = new Semaphore(this.concurrency);
+        this.handleSignals = builder.handleSignals;
     }
 
     public static Builder builder() {
@@ -152,6 +155,24 @@ public final class OJSWorker {
         logger.log(Level.INFO, "Worker {0} starting (queues={1}, concurrency={2})",
                 workerId, queues, concurrency);
 
+        // Install JVM shutdown hook for graceful drain in containers/K8s
+        if (handleSignals) {
+            shutdownHookThread = new Thread(() -> {
+                logger.log(Level.INFO, "Worker {0} received shutdown signal, draining...", workerId);
+                stop();
+                try {
+                    // Wait for drain to complete (blocks the shutdown hook thread)
+                    var deadline = Instant.now().plus(gracePeriod);
+                    while (activeCount.get() > 0 && Instant.now().isBefore(deadline)) {
+                        Thread.sleep(100);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "ojs-shutdown-" + workerId);
+            Runtime.getRuntime().addShutdownHook(shutdownHookThread);
+        }
+
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             // Launch fetch loop and heartbeat loop as virtual threads
             var fetchFuture = executor.submit(this::fetchLoop);
@@ -182,6 +203,16 @@ public final class OJSWorker {
         }
 
         logger.log(Level.INFO, "Worker {0} stopped", workerId);
+
+        // Remove shutdown hook (no-op if already in shutdown)
+        if (handleSignals && shutdownHookThread != null) {
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdownHookThread);
+            } catch (IllegalStateException e) {
+                // Already shutting down — expected
+            }
+            shutdownHookThread = null;
+        }
     }
 
     /**
@@ -432,6 +463,7 @@ public final class OJSWorker {
         private String authToken;
         private Map<String, String> headers;
         private Transport transport;
+        private boolean handleSignals = true;
 
         private Builder() {}
 
@@ -488,6 +520,15 @@ public final class OJSWorker {
         /** Set a custom transport (for testing or non-HTTP transports). Overrides url/httpClient/authToken/headers. */
         public Builder transport(Transport transport) {
             this.transport = transport;
+            return this;
+        }
+
+        /**
+         * Whether to install a JVM shutdown hook for graceful drain.
+         * Default: true. Set to false if you manage shutdown yourself.
+         */
+        public Builder handleSignals(boolean handleSignals) {
+            this.handleSignals = handleSignals;
             return this;
         }
 
