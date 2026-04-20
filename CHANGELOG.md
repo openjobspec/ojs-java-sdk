@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-20
+
 ### Fixed
 - Fixed compilation error in `OpenTelemetryMiddleware` where lambda returned a value from void method
 - Fixed silent exception swallowing in `OJSWorker` heartbeat loop — errors are now logged
